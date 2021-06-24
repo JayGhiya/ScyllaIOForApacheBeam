@@ -1,0 +1,5 @@
+create keyspace apachebeamtest with replication = {'class' : 'SimpleStrategy','replication_factor' : 1};
+
+CREATE TABLE IF NOT EXISTS apachebeamtest.queryTest(person_id int, person_name text,person_datetime timestamp, PRIMARY KEY(person_id,person_datetime));
+
+
