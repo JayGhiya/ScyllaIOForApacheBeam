@@ -1,0 +1,58 @@
+package org.apache.beam.examples.customSource;
+
+
+import com.datastax.driver.core.ResultSet;
+import org.apache.beam.sdk.transforms.SerializableFunction;
+
+import java.util.Iterator;
+import java.util.concurrent.Future;
+
+/**
+ * This interface allows you to implement a custom mapper to read and persist elements from/to
+ * Cassandra.
+ *
+ * <p>To Implement a custom mapper you need to: 1) Create an implementation of {@link Mapper}. 2)
+ * Create a {@link SerializableFunction} that instantiates the {@link Mapper} for a given Session,
+ * for an example see {@link DefaultObjectMapperFactory}). 3) Pass this function to {@link
+ * ScyllaIO.Read#withMapperFactoryFn(SerializableFunction)} in the CassandraIO builder. <br>
+ * Example:
+ *
+ * <pre>{@code
+ * SerializableFunction<Session, Mapper> factory = new MyCustomFactory();
+ * pipeline
+ *    .apply(...)
+ *    .apply(CassandraIO.<>read()
+ *        .withMapperFactoryFn(factory));
+ * }</pre>
+ */
+
+public interface Mapper<T> {
+
+    /**
+     * This method is called when reading data from Cassandra. It should map a ResultSet into the
+     * corresponding Java objects.
+     *
+     * @param resultSet A resultset containing rows.
+     * @return An iterator containing the objects that you want to provide to your downstream
+     *     pipeline.
+     */
+    Iterator<T> map(ResultSet resultSet);
+
+    /**
+     * This method is called for each delete event. The input argument is the Object that should be
+     * deleted in Cassandra. The return value should be a Future that completes when the delete action
+     * is completed.
+     *
+     * @param entity Entity to be deleted.
+     */
+    Future<Void> deleteAsync(T entity);
+
+    /**
+     * This method is called for each save event. The input argument is the Object that should be
+     * saved or updated in Cassandra. The return value should be a future that completes when the save
+     * action is completed.
+     *
+     * @param entity Entity to be saved.
+     */
+    Future<Void> saveAsync(T entity);
+}

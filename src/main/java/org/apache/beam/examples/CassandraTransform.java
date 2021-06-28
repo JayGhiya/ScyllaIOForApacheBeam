@@ -10,7 +10,7 @@ public class CassandraTransform extends DoFn<Scientist,Scientist> {
     public void processElement(ProcessContext c)
     {
         Scientist scientist = c.element();
-        /*System.out.println("scientisit"+scientist.);
+        /*System.out.println("scientisit"+scientist.id);
         System.out.println("scientisit"+scientist.name);*/
         c.output(scientist);
     }

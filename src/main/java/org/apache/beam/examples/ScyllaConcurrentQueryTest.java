@@ -31,11 +31,9 @@ public class ScyllaConcurrentQueryTest {
 
 
 
-
-
-
-
     public ResultSet selectQuery(PreparedStatement preparedStatement, int partitionValue) {
+        BoundStatement boundStatement = preparedStatement.bind(partitionValue);
+
         return session.execute(preparedStatement.bind(partitionValue));
 
     }
@@ -47,13 +45,20 @@ public class ScyllaConcurrentQueryTest {
     }
 
     public static void main(String[] args) throws ExecutionException, InterruptedException {
+
+
+   /*     String result = String.format("select * from apachebeamtest.queryTest where person_id = %s",1);
+        System.out.println(result);
+*/
+        long startTime = System.currentTimeMillis();
         ScyllaConcurrentQueryTest scyllaConcurrentQueryTest = new ScyllaConcurrentQueryTest("172.17.0.2",19042,"cassandra","casandra","apachebeamtest");
         PreparedStatement query = scyllaConcurrentQueryTest.initializePreparedStatement("select * from apachebeamtest.queryTest where person_id = ?");
+
         ExecutorService executor = Executors.newFixedThreadPool(20);
 
         List<Future> futures = new ArrayList<>();
         Vector<ResultSet> resultSets = new Vector<>();
-        long startTime = System.currentTimeMillis();
+
         System.out.println("Fetching data from 20 partitions concurrently Started:"+startTime);
         CountDownLatch latch = new CountDownLatch(20);
         for(int i =0;i<20;i++)
@@ -79,8 +84,6 @@ public class ScyllaConcurrentQueryTest {
         System.out.println("Time spent:"+(endTime-startTime));
         executor.shutdown();
         scyllaConcurrentQueryTest.closeResources();
-
-
 
     }
 
