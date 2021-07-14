@@ -419,90 +419,118 @@ public class ScyllaIO {
         public List<BoundedSource<T>> split(
                 long desiredBundleSizeBytes, PipelineOptions pipelineOptions) {
 
-                    return splitAcrossPartitionKeys(spec, desiredBundleSizeBytes, getEstimatedSizeBytes(pipelineOptions));
+            getEstimatedSizeBytes(pipelineOptions);
+
+            return splitAcrossPartitionKeys(spec);
 
 
         }
 
-
-        private static String buildQuery(Read spec) {
+       /* private static String buildQuery(Read spec) {
             return (spec.queryWithPartitionKey() == null)
                     ? String.format("SELECT * FROM %s.%s", spec.keyspace().get(), spec.table().get())
                     : spec.queryWithPartitionKey().get().toString();
-        }
-
-
-
+        }*/
 
         /**
-         * Generator for partition based query
+         *
+         * Spartans Code
+         * @param baseQuery
+         * @param partitionKey
+         * @return
          */
-        private String generatePartitionBasedQuery(String baseQuery, int partitionKey) {
+        protected String generatePartitionBasedQuery(String baseQuery, int partitionKey) {
             return String.format(baseQuery,partitionKey);
         }
 
-        private BoundedSource<T> generateBoundedSource(Read<T> spec, List<String> queries, long estimatedSize) {
+        /**
+         * Spartans Code
+         * @param spec
+         * @param queries
+         * @param estimatedSize
+         * @return
+         */
+        protected BoundedSource<T> generateBoundedSource(Read<T> spec, List<String> queries, long estimatedSize) {
             ScyllaSource<T> source = new ScyllaSource<>(spec, queries, estimatedSize);
             return source;
         }
-        /**
-         * SpartansCOde
-         *
-         * @param partitionKeyIterator
-         * @param query
-         * @param maxQueriesToBeAdded
-         * @return
-         */
-        private List<String> addConcurrentQueriesToSplit(Iterator<Integer> partitionKeyIterator,String query,int maxQueriesToBeAdded)
-        {
 
-            int concurrentQueriesCountPerSplit =0;
-            List<String> queries = new ArrayList<>();
-            while(concurrentQueriesCountPerSplit<maxQueriesToBeAdded)
+        /**
+         * Spartans Code
+         *
+         */
+        protected List<List<String>> getQueriesListForBoundedSources(int numberOfSplits)
+        {
+            List<List<String>> queriesListForBoundedSources = new ArrayList<>();
+
+            for(int i =0 ; i <numberOfSplits; i++)
             {
-                int partitionKey = partitionKeyIterator.next();
-                String partitionBasedquery = generatePartitionBasedQuery(query,partitionKey);
-                queries.add(partitionBasedquery);
-                concurrentQueriesCountPerSplit++;
+                queriesListForBoundedSources.add(new ArrayList<>());
             }
-            return queries;
+        return queriesListForBoundedSources;
         }
+
+        protected void distributePartitionBasedQueriesAcross(List<Integer> partitionKeys,List<List<String>> queriesListForBoundedSources,int numberOfSplits)
+        {
+            int boundedSourceQueriesIndex = 0;
+            Iterator<Integer> partitionKeyIterator = partitionKeys.iterator();
+            while(partitionKeyIterator.hasNext())
+            {
+                if(boundedSourceQueriesIndex==numberOfSplits)
+                {
+                    boundedSourceQueriesIndex=0;
+                }
+
+                int partitionKey = partitionKeyIterator.next();
+
+                queriesListForBoundedSources.get(boundedSourceQueriesIndex).add(generatePartitionBasedQuery(spec.queryWithPartitionKey().get(),partitionKey));
+
+                boundedSourceQueriesIndex++;
+            }
+
+        }
+
+        protected List<BoundedSource<T>> assignDistributedQueriesListToEachBoundedSource(Read<T> spec,List<List<String>> queriesListForBoundedSources)
+        {
+            List<BoundedSource<T>> sources = new ArrayList<>();
+            for(int i =0 ; i <spec.minNumberOfSplits().get(); i++)
+            {
+                sources.add(generateBoundedSource(spec,queriesListForBoundedSources.get(i),estimatedSize));
+            }
+            return sources;
+        }
+
 
         /**
          * SpartansCode
          * Get data based on single/multiple partition keys
          */
-        private List<BoundedSource<T>> splitAcrossPartitionKeys(Read<T> spec,
-                                                                long desiredBundleSizeBytes,
-                                                                long estimatedSizeBytes) {
+        private List<BoundedSource<T>> splitAcrossPartitionKeys(Read<T> spec) {
             //The max number of splits would be based on number of partition keys
             //After getting the result we will merge n splits into number of task slots available
             List<Integer> partitionKeys = spec.partitions().get();
-            int noOfPartitionKeys = partitionKeys.size();
-            Iterator<Integer> partitionKeyIterator = partitionKeys.iterator();
-
-            List<BoundedSource<T>> sources = new ArrayList<>();
-
-            int numberOfConcurrentQueriesPerSplit = noOfPartitionKeys / spec.minNumberOfSplits().get();
-            int mod = (noOfPartitionKeys) % (spec.minNumberOfSplits().get());
 
 
-            String userQuery = spec.queryWithPartitionKey().get();
+            int numberOfSplits = spec.minNumberOfSplits().get();
 
-            for (int i = 0; i < spec.minNumberOfSplits().get() - 1; i++) {
-                List<String> queries = addConcurrentQueriesToSplit(partitionKeyIterator,userQuery,numberOfConcurrentQueriesPerSplit);
+            /**
+             * Constructing n number of List which will hold queries for partition keys
+             * Here n is equal to number of splits/Bounded Sources
+             */
+            List<List<String>> queriesListForBoundedSources = getQueriesListForBoundedSources(numberOfSplits);
 
-                sources.add(generateBoundedSource(spec,queries,estimatedSize));
-            }
-            //now for the last split if there was a mod then do numberOfConcurrentQueriesPerSplit+mod
 
-            int remainingConcurrentQueriesForTheLastSplit = numberOfConcurrentQueriesPerSplit+mod;
+            /**
+             * Distributing partition based queries across queries List
+             */
 
-            List<String> queries = addConcurrentQueriesToSplit(partitionKeyIterator,userQuery,remainingConcurrentQueriesForTheLastSplit);
+            distributePartitionBasedQueriesAcross(partitionKeys,queriesListForBoundedSources,numberOfSplits);
 
-            sources.add(generateBoundedSource(spec,queries,estimatedSize));
+            /**
+             * Assigning queries list to each bounded source
+             */
 
-            return sources;
+            return assignDistributedQueriesListToEachBoundedSource(spec,queriesListForBoundedSources);
 
         }
 

@@ -6,7 +6,7 @@ import org.apache.beam.sdk.options.ValueProvider;
 import org.apache.beam.sdk.transforms.SerializableFunction;
 import org.checkerframework.checker.nullness.qual.Nullable;
 
-import javax.annotation.processing.Generated;
+import javax.annotation.Generated;
 import java.util.List;
 import java.util.Optional;
 
